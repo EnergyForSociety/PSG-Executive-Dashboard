@@ -352,9 +352,10 @@
 
   /* ---------- ตัวกรองและการแสดงผล ---------- */
   function goto(p, sub) { if (sub) st.sub = sub; location.hash = '#/' + p; }
+  const usesPeriod = () => ['exec', 'fin'].indexOf(st.page) >= 0;
+  /* หน้าที่ไม่มีตัวเลือกช่วงงวด: บอกช่วงข้อมูลไว้ท้ายหน้า เพื่อให้การ์ด KPI ขึ้นก่อนโดยไม่ต้องเลื่อนจอ */
+  const periodNote = () => `<span class="note">ช่วงข้อมูล: ${st.page === 'sales' ? 'ฐานเดือนผลิตและวันที่เอกสาร' : st.page === 'ops' ? 'ตามแหล่งข้อมูลแต่ละส่วน' : 'ทั้งหมด'} · ข้อมูล ณ ${thD(S.meta.asof)}</span>`;
   function filters() {
-    const usesPeriod = ['exec', 'fin'].indexOf(st.page) >= 0;
-    if (!usesPeriod) return `<span class="note">ช่วงข้อมูล: ${st.page === 'sales' ? 'ฐานเดือนผลิตและวันที่เอกสาร' : st.page === 'ops' ? 'ตามแหล่งข้อมูลแต่ละส่วน' : 'ทั้งหมด'} · ข้อมูล ณ ${thD(S.meta.asof)}</span>`;
     return `<label>ช่วงงวดบัญชี<select id="f-period"><option value="ytd" ${st.period === 'ytd' ? 'selected' : ''}>สะสมตั้งแต่ต้นปี (YTD)</option>${months().slice().reverse().map(m => `<option value="${m}" ${st.period === m ? 'selected' : ''}>${thML(m)}${M.monthStatus(S, m).estRevenue ? ' (รายได้ประมาณการ)' : ''}</option>`).join('')}</select></label>
       <span class="hint">ทุกเดือนเป็นผลเบื้องต้นจาก Ledger — ยังไม่มีข้อมูลยืนยันการปิดบัญชี · KPI กราฟ และตารางใช้ช่วงเดียวกัน</span>`;
   }
@@ -365,11 +366,13 @@
     $('#ptitle').textContent = st.page === 'exec' ? 'PSG Executive Dashboard' : title;
     $('#psub').textContent = 'ภาพรวมธุรกิจ การเงิน การผลิต และซ่อมบำรุง · ' + S.meta.company;
     $('#status').innerHTML = `<span class="chip"><span class="dot"></span>ข้อมูล ณ ${thD(S.meta.asof)}</span><span class="chip warn">ผลเบื้องต้น/ยังไม่ปิดบัญชี</span>`;
-    $('#filters').innerHTML = filters();
+    const per = usesPeriod();
+    $('#filters').innerHTML = per ? filters() : '';
+    document.querySelector('.filterbar').hidden = !per;
     const f = $('#f-period'); if (f) f.onchange = () => { st.period = f.value; save(); render(true); };
     const fn = { exec: pExec, sales: pSales, fin: pFin, proj: pProj, strat: pStrat, ops: pOps, data: pData }[st.page];
     const main = $('#main');
-    try { main.innerHTML = fn(); } catch (e) { main.innerHTML = `<div class="state err">แสดงผลไม่สำเร็จ: ${esc(e.message)}</div>`; console.error(e); return; }
+    try { main.innerHTML = fn() + (per ? '' : `<div class="note-bar">${periodNote()}</div>`); } catch (e) { main.innerHTML = `<div class="state err">แสดงผลไม่สำเร็จ: ${esc(e.message)}</div>`; console.error(e); return; }
     main.querySelectorAll('[data-table]').forEach(el => mountTable(el, TB[+el.dataset.table]));
     document.documentElement.classList.toggle('no-anim', anim === false);
     if (anim !== false) countUp(main, GEN);

@@ -162,6 +162,8 @@ tbody tr:nth-child(n+2) { animation-delay: .03s; } tbody tr:nth-child(n+4) { ani
 .state.err { color: var(--bad); border-color: var(--bad); }
 .empty { padding: 18px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); background: var(--insbg); font-size: 14px; }
 .note { font-size: 13px; color: var(--muted); }
+/* แถบบอกช่วงข้อมูลของหน้าที่ไม่มีตัวเลือกช่วงงวด — อยู่ท้ายหน้า ให้การ์ด KPI ขึ้นก่อน */
+.note-bar { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 13px 18px; box-shadow: var(--shadow); }
 .cols { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tools input[type=search], .tools select { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; min-width: 200px; background: var(--input); color: var(--ink); }
@@ -187,7 +189,7 @@ tbody tr:nth-child(n+2) { animation-delay: .03s; } tbody tr:nth-child(n+4) { ani
    }
   body { background: #fff; font-size: 11.5px; zoom: 0.8; }
   .filters, .tabs, .navbar, .seg, .btn-out, .who, .btn, .more, .modal, .tools, .pager, .no-print { display: none !important; } * { animation: none !important; } .band { background: #17365D !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .pagehead { padding: 8px 0 0; } .filterbar { display: none; }
-  .main { padding: 0; display: block; max-width: none; } .main > * { margin-bottom: 8px; } .chart { max-height: 58mm; } .status { justify-content: flex-start; } .foot { padding: 0; } .card { box-shadow: none; break-inside: avoid; padding: 10px 12px; }
+  .main { padding: 0; display: block; max-width: none; } .main > * { margin-bottom: 8px; } .chart { max-height: 58mm; } .status { justify-content: flex-start; } .foot { padding: 0; } .card { box-shadow: none; break-inside: avoid; padding: 10px 12px; } .note-bar { border: 0; box-shadow: none; padding: 0; }
   .kpi .val { font-size: 22px; } .grid { gap: 8px; } .insight { break-inside: avoid; }
 }
 
