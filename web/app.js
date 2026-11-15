@@ -188,18 +188,14 @@
   }
   function pExec() {
     const ms = selMonths(), T = M.pnlSel(S, ms), lk = M.latestKwh(S), cpk = lk ? M.cosPerKwh(S, lk.pm) : null;
-    const mt = M.sum(S.maint_ledger.filter(x => ms.indexOf(x.ym) >= 0), x => x.net), ws = S.maint ? M.woStats(S.maint.rows, S.meta.asof) : null;
     const lmStatus = M.monthStatus(S, ms[ms.length - 1]);
     const prelim = tag(lmStatus.estRevenue ? 'ผลเบื้องต้น · รายได้งวดล่าสุดเป็นประมาณการ' : 'ผลเบื้องต้น/ยังไม่ปิดบัญชี', 'wait');
-    return `<div class="grid g4">
+    return `<div class="grid g5">
       ${kpi({ label: 'รายได้ขายไฟฟ้า (Ledger)', val: MBv(T.rev_sales)[0], unit: MBv(T.rev_sales)[1], sub: periodTxt(), badge: prelim, fn: () => goto('fin') })}
       ${kpi({ label: 'กำไร(ขาดทุน)ก่อนภาษี', val: MBv(T.ebt)[0], unit: MBv(T.ebt)[1], sub: `EBITDA ${MB(T.ebitda)} · ${periodTxt()}`, badge: prelim, c: T.ebt < 0 ? 'warn' : '', fn: () => goto('fin') })}
-      ${kpi({ label: 'เงินสดคงเหลือ', val: null, na: 'รอแหล่งข้อมูล', sub: 'ไม่มี bank statement/งบดุล (API ตอบ 402) และยอดในทะเบียนธนาคารเป็น 0 — ไม่ใช้สรุป', c: 'sky', fn: () => goto('data') })}
       ${kpi({ label: 'kWh ขาย เดือนผลิตล่าสุด', val: lk ? nf(lk.kwh) : null, unit: 'kWh', sub: lk ? `เดือนผลิต ${thML(lk.pm)} · อ่านจากข้อความ BL (รอยืนยันมิเตอร์)` : '', fn: () => goto('sales') })}
       ${kpi({ label: 'ราคาเฉลี่ยขาย', val: lk && lk.price ? nf(lk.price, 2) : null, unit: 'บาท/kWh', sub: lk ? `ยอด BL ก่อน VAT ÷ kWh เดือนผลิต ${thM(lk.pm)}` : '' })}
       ${kpi({ label: 'ต้นทุนขายต่อ kWh', val: cpk !== null ? nf(cpk, 2) : null, unit: 'บาท/kWh', sub: lk ? `ต้นทุนขาย (51x) งวด ${thM(lk.pm)} ÷ kWh เดือนผลิตเดียวกัน · ไม่รวมค่าเสื่อม` : '' })}
-      ${kpi({ label: 'ค่าซ่อมบำรุงตามบัญชี', val: MBv(mt)[0], unit: MBv(mt)[1], sub: `${periodTxt()} · อยู่ใน P&L แล้ว (ไม่บวกซ้ำ)`, c: 'navy', fn: () => goto('ops', 'maint') })}
-      ${kpi({ label: 'ใบงานซ่อมค้าง', val: ws ? nf(ws.open) : null, unit: 'ใบ', sub: ws ? `จาก ${nf(ws.total)} ใบ · snapshot ${thD(S.maint.source.reported_to)}` : '', c: 'navy', fn: () => goto('ops', 'maint') })}
     </div>
     <section class="card"><div class="head"><div><h2>รายได้ ต้นทุน และกำไรรายเดือน (งวดบัญชี)</h2><p class="sub">Ledger · ทุกเดือนเป็นผลเบื้องต้น ยังไม่มีข้อมูลยืนยันการปิดบัญชี · เส้น = kWh ขายตามเดือนผลิตเดียวกัน</p></div></div>
       ${chart({ title: 'รายได้และต้นทุนรายเดือน', labels: months().map(thM), bars: [{ name: 'รายได้ขายไฟฟ้า', color: 'var(--bar1)', vals: months().map(m => S.pnl.lines.rev_sales[m]) }, { name: 'ต้นทุนขาย (51x)', color: 'var(--bar3)', vals: months().map(m => S.pnl.lines.cos[m]) }, { name: 'กำไรก่อนภาษี', color: 'var(--bar2)', vals: months().map(m => S.pnl.lines.ebt[m]) }],
@@ -309,12 +305,12 @@
     const R = S.maint.rows, w = M.woStats(R, S.meta.asof), src = S.maint.source, ms = months();
     const byM = M.countBy(R, r => r.machine).slice(0, 10), byS = M.countBy(R, r => r.status), mx = byM.length ? byM[0][1] : 1;
     const ml = S.maint_ledger, macc = Object.keys(S.maint_acc);
-    const lk = S.wo_links;
+    const lk = S.wo_links, mtot = M.sum(ml.filter(x => ms.indexOf(x.ym) >= 0), x => x.net);
     return `<div class="grid g4">
       ${kpi({ label: 'ใบงานทั้งหมด', val: nf(w.total), unit: 'ใบ', sub: `${nf(w.qr)} QR Code (ไม่จำเป็นต้องเป็นเครื่องจักร ${w.qr} เครื่อง — ต้องมี parent asset mapping)` })}
       ${kpi({ label: 'ใบงานค้าง', val: nf(w.open), unit: 'ใบ', sub: `ปิดงาน/รอประเมิน ${w.done} · ถูกปฏิเสธ ${w.rejected}`, c: 'warn', fn: () => openTable({ title: 'ใบงานค้าง', cols: woCols, rows: R.filter(r => r.state === 'open'), sort: 'reported', dir: 1, file: 'PSG_wo_open' }) })}
       ${kpi({ label: 'ส่งซ่อมภายนอก', val: nf(w.external), unit: 'ใบ', sub: 'จากรหัส/วิธีแก้ที่ระบุส่งซ่อม' })}
-      ${kpi({ label: 'MTBF / MTTR / PM Compliance', val: null, na: 'ยังคำนวณไม่ได้', sub: 'ไม่มีชั่วโมงเดินเครื่อง เหตุเสียที่ยืนยัน และแผน PM เป็นตัวหาร' })}
+      ${kpi({ label: 'ค่าซ่อมบำรุงตามบัญชี', val: MBv(mtot)[0], unit: MBv(mtot)[1], sub: `ม.ค.–${thM(ms[ms.length - 1])} (YTD งวดบัญชี) · อยู่ใน P&L แล้ว (ไม่บวกซ้ำ)`, c: 'navy', fn: () => openTable({ title: 'รายการบัญชีซ่อมบำรุง', sub: 'มุมมองเจาะดู — ยอดนี้อยู่ใน P&L แล้ว ไม่บวกซ้ำ', cols: ledgerCols, rows: S.maint_ledger, sort: 'date', dir: 1, file: 'PSG_maint_ledger', total: a => ({ net: M.sum(a, x => x.net) }) }) })}
     </div>
     <div class="grid g2">
       <section class="card"><h2>ใบงานตามเครื่องจักร (10 อันดับ)</h2><p class="sub" style="margin-bottom:8px">นับใบงาน ไม่ใช่จำนวนครั้งที่เสีย — เช่นเครื่องเดียวอาจมีหลายใบสำหรับงานต่อเนื่อง</p>

@@ -18,7 +18,7 @@ const URL = process.env.PSG_URL || 'http://127.0.0.1:8091/web/';
   await p.goto(URL + '#/exec'); await p.reload(); await p.waitForTimeout(1300);
   const k = await p.$$eval('.kpi .val', els => els.map(e => ({ aria: e.getAttribute('aria-label'), txt: e.textContent.trim() })));
   k.forEach(x => { if (!/N\/A|รอแหล่ง|ยังคำนวณ|ไม่แสดง|ไม่เหมาะ/.test(x.txt)) assert.ok(x.aria.includes(x.txt.split(' ')[0]), 'aria-label ต้องมีค่าจริง ' + x.txt); });
-  assert.ok(k.some(x => x.txt.includes('รอแหล่งข้อมูล')), 'เงินสดต้องเป็น N/A'); ok++;
+  assert.ok(!k.some(x => /รอแหล่งข้อมูล|N\/A/.test(x.txt)), 'หน้าแรกไม่แสดง KPI ที่ไม่มีข้อมูล'); assert.strictEqual(k.length, 5); ok++;
   // เปลี่ยนตัวกรองกลางคัน: ค่าต้องจบที่ค่าของตัวกรองใหม่
   await p.selectOption('#f-period', '2026-09'); await p.waitForTimeout(100); await p.selectOption('#f-period', 'ytd'); await p.waitForTimeout(1300);
   const v1 = await p.$eval('.kpi .val', e => e.textContent.trim()), a1 = await p.$eval('.kpi .val', e => e.getAttribute('aria-label'));

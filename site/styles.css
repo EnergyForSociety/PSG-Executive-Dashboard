@@ -215,3 +215,6 @@ code { font-size: 12.5px; background: var(--chip2); padding: 1px 5px; border-rad
 .logo-l { display: none; } :root[data-theme="light"] .logo-l { display: block; } :root[data-theme="light"] .logo-d { display: none; }
 :root[data-theme="light"] .seg button[aria-pressed="true"] { background: var(--blue); color: #fff; }
 :root[data-theme="light"] .band-wave { opacity: .45; }
+.grid.g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1280px) { .grid.g5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .grid.g5 { grid-template-columns: 1fr; } }

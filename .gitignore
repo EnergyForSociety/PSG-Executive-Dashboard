@@ -14,3 +14,5 @@ config/wo_po_links.json
 *.log
 __pycache__/
 node_modules/
+# ไฟล์ขนย้าย
+*.tgz
