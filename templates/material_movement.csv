@@ -1,0 +1,1 @@
+date,material_code,movement(purchase|receive|use|stock),quantity,unit,amount_before_vat,transport_amount,quality_note,source_doc,recorded_by

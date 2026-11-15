@@ -1,0 +1,1 @@
+date,asset_id,generator,meter_id,meter_multiplier,kwh_generated,kwh_internal_use,kwh_exported,run_hours,stop_hours,stop_cause,work_order,approved_target_kwh,recorded_by,certified_by

@@ -1,0 +1,16 @@
+# ===== ข้อมูลการเงินจริง / ความลับ — ห้ามขึ้น Git (repo เป็นสาธารณะเพื่อใช้ GitHub Pages) =====
+raw/
+data/
+om/
+intake/
+keys/
+*key*.txt
+*.key
+.env
+.env.*
+!.env.example
+config/wo_po_links.json
+# อื่น ๆ
+*.log
+__pycache__/
+node_modules/
