@@ -1,0 +1,33 @@
+{
+  "_note": "ตัวอย่างรูปแบบ (ค่าสมมติ ไม่ใช่ข้อมูลจริง) — คัดลอกไปเป็น intake/project_links.json แล้วแก้ · inv_id มาจากคอลัมน์ 'รหัสรายการลงทุน' ในหน้าโครงการ (INV-<เลข PO หรือเลขเอกสาร AP/EXP>)",
+  "links": [
+    {
+      "project_id": "PSG-P-EXAMPLE",
+      "clickup_task_id": "abc123xyz",
+      "company": "PSG",
+      "inv_id": "INV-PO0000000000",
+      "doc": "PO0000000000",
+      "line": null,
+      "relation": "confirmed",
+      "allocation_pct": 100,
+      "allocation_amount": null,
+      "reason": "เอกสารขออนุมัติลงทุนฉบับที่ ... ระบุ PO นี้",
+      "confirmed_by": "ชื่อผู้ยืนยัน",
+      "confirmed_at": "2026-12-01"
+    },
+    {
+      "project_id": null,
+      "clickup_task_id": null,
+      "company": "PSG",
+      "inv_id": "INV-RR0000000000",
+      "doc": "RR0000000000",
+      "line": null,
+      "relation": "not_project",
+      "allocation_pct": null,
+      "allocation_amount": null,
+      "reason": "อุปกรณ์สำนักงานทั่วไป ไม่ใช่โครงการ",
+      "confirmed_by": "ชื่อผู้ยืนยัน",
+      "confirmed_at": "2026-12-01"
+    }
+  ]
+}

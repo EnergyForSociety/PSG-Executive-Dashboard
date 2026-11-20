@@ -56,7 +56,8 @@ html = html.replace(/(src|href)="((?!https?:|\/\/)[\w./-]+\.(?:js|css))"/g, (m, 
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 // ตรวจไม่ให้ข้อมูลดิบหลุดไปกับเว็บ
-const leak = [], secrets = [...new Set(snap.sales.map(l => l.customer).concat(snap.pay.map(p => p.vendor), snap.po.map(p => p.vendor)).filter(x => x && x.length > 6))];
+const P = snap.projects || { tasks: [], items: [] };      // ชื่องาน/โครงการจาก ClickUp เป็นข้อมูลภายใน — ต้องอยู่ในไฟล์เข้ารหัสเท่านั้น
+const leak = [], secrets = [...new Set(snap.sales.map(l => l.customer).concat(snap.pay.map(p => p.vendor), snap.po.map(p => p.vendor), P.tasks.map(t => t.name), P.tasks.map(t => t.id), P.items.map(i => i.name)).filter(x => x && x.length > 6))];
 (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (/\.(js|html|css|json|txt)$/.test(f) && !/data\.enc\.js$|msal-browser/.test(f)) { const t = fs.readFileSync(p, 'utf8'); if (/\b(?:BL|RE|IV|RV|AP|RR|PO|PR|JV)\d{10}\b/.test(t) || secrets.some(x => t.includes(x))) leak.push(path.relative(out, p)); } } })(out);
 if (leak.length) { console.error('พบข้อมูลจริงในไฟล์เว็บที่ไม่เข้ารหัส: ' + leak.join(', ')); process.exit(1); }
 console.log('สร้างเว็บที่', out, '· ข้อมูล ณ', snap.meta.asof, '·', (enc.length / 1024).toFixed(0), 'KB (เข้ารหัส)');

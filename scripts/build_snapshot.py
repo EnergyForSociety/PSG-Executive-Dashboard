@@ -257,9 +257,14 @@ def build(asof):
 if __name__ == '__main__':
     asof = sys.argv[sys.argv.index('--asof') + 1] if '--asof' in sys.argv else datetime.datetime.now(BKK).date().isoformat()
     s = build(asof)
+    if os.path.isdir(os.path.join(RAW, 'clickup')):      # โครงการ/งานสำคัญจาก ClickUp (ถ้ามีผลดิบ) — ไม่มี = หน้าโครงการแสดง "รอแหล่งข้อมูล"
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import build_projects
+        s['projects'] = build_projects.build(s)
     os.makedirs(DATA, exist_ok=True)
     json.dump(s, open(os.path.join(DATA, 'snapshot.json'), 'w', encoding='utf-8'), ensure_ascii=False)
     L = s['pnl']['lines']; ms = s['meta']['pnl_months']
     print('P&L', ms[0], '–', ms[-1], '· รายได้ขาย', sum(L['rev_sales'].values()) / 100, '· กำไรก่อนภาษี', sum(L['ebt'].values()) / 100)
     print('BL', len(s['sales']), '· ใบงาน', len((s['maint'] or {}).get('rows', [])))
     for c in s['checks']: print(' ', c['level'].upper(), c['msg'])
+    for c in (s.get('projects') or {}).get('checks', []): print('  [ClickUp]', c['level'].upper(), c['msg'])

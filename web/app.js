@@ -4,7 +4,7 @@
   'use strict';
   const M = window.PSGM, $ = (s, r) => (r || document).querySelector(s);
   let S = null, DR = [], TB = [], GEN = 0;
-  const st = { page: 'exec', period: 'ytd', pm: null, sub: 'prod' };
+  const st = { page: 'exec', period: 'ytd', pm: null, sub: 'prod', pv: 'all' };
   const TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   const PAGES = [['exec', 'Executive'], ['sales', 'การขาย'], ['fin', 'การเงิน'], ['proj', 'โครงการ'], ['strat', 'กลยุทธ์'], ['ops', 'ปฏิบัติการ'], ['data', 'สถานะข้อมูล']];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -247,15 +247,148 @@
     </div>
     <section class="card accent sky"><h2>เงินสดและกระแสเงินสด</h2><p class="sub" style="margin-top:6px">${NA('รอแหล่งข้อมูล')} — ยอดคงเหลือในทะเบียนธนาคารของ TRCloud เป็น 0 ทุกบัญชี (${S.banks.length} บัญชี) และ API งบดุล/กระแสเงินสดต้องใช้แพ็กเกจ Data Warehouse · ต้องการ bank statement รายเดือนเพื่อแยกเงินรับจ่ายจริง รายการไม่ใช่เงินสด และการโอนระหว่างบัญชี</p></section>`;
   }
+  /* ---------- หน้าโครงการ: ClickUp (แผนงาน/สถานะ) + TRCLOUD (เงินลงทุน/ภาระจัดซื้อ) แยกฐานข้อมูล ---------- */
+  const PTYPE = { investment_delivery: 'ลงทุน/ติดตั้ง/ปรับปรุง', feasibility_development: 'ศึกษา/พัฒนาธุรกิจ', regulatory_approval: 'ขออนุมัติ/สิทธิส่งเสริม', financing_workstream: 'งานจัดหาเงินทุน',
+    contract_workstream: 'งานสัญญา/เจรจา', recurring_operation: 'งานประจำ/PM', corporate_governance: 'กิจการบริษัท', supporting_task: 'งานสนับสนุน/milestone', needs_review: 'รอจำแนก' };
+  const PVIEW = [['all', 'ทั้งหมด', null], ['inv', 'ลงทุน/ติดตั้ง/ปรับปรุง', ['investment_delivery']], ['feas', 'ศึกษาและพัฒนาธุรกิจ', ['feasibility_development']], ['reg', 'BOI/การอนุมัติ', ['regulatory_approval']],
+    ['sup', 'งานสนับสนุนเงินทุนและสัญญา', ['financing_workstream', 'contract_workstream', 'supporting_task']], ['opsg', 'งานประจำ/กิจการบริษัท', ['recurring_operation', 'corporate_governance']], ['rev', 'รอจำแนก', ['needs_review']]];
+  const MAPL = { confirmed: ['เชื่อมแล้วและยืนยัน', 'fact'], proposed: ['คู่ที่เสนอให้ตรวจสอบ', 'wait'], unlinked: ['ยังไม่เชื่อม', 'none'], not_project: ['ไม่เกี่ยวข้องกับโครงการ', 'none'] };
+  const CONF = { confirmed: ['ยืนยันแล้ว', 'fact'], proposed: ['ข้อเสนอ (proposed)', 'wait'], unclassified: ['ยังไม่จำแนก', 'sev'] };
+  const STAT = { 'complete': 'fact', 'cancelled': 'none', 'on hold': 'wait', 'in progress': '', 'not started': 'none' };
+  const thDT = iso => iso ? thD(iso) + ' ' + iso.slice(11, 16) + ' น.' : '–';
+  const cuLink = (url, txt) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(txt || 'เปิด ClickUp')} ↗</a>` : '';
+  let TR = [];
+  const treeSlot = spec => { TR.push(spec); return `<div data-tree="${TR.length - 1}"></div>`; };
+  function pv() { return PVIEW.find(v => v[0] === st.pv) || PVIEW[0]; }
+  function pvItems(P) { const t = pv()[2]; return P.items.filter(i => !t || t.indexOf(i.type) >= 0); }
+  function mountTree(el, spec) {       // ตาราง hierarchy แบบ recursive: ย่อ/ขยาย ค้นหา ส่งออก CSV
+    const T = spec.T, roots = spec.roots, closed = new Set(spec.collapsed || []); let q = '';
+    const kids = id => T[id].children.filter(c => T[c]);
+    const match = id => !q || (T[id].name + ' ' + T[id].assignees.join(' ') + ' ' + T[id].status + ' ' + (T[id].role_label || '')).toLowerCase().indexOf(q) >= 0;
+    const hit = id => match(id) || kids(id).some(hit);
+    function walk(id, out) { if (!hit(id)) return; out.push(id); if (!closed.has(id) || q) kids(id).forEach(c => walk(c, out)); }
+    function rows() { const o = []; roots.forEach(r => walk(r, o)); return o; }
+    const csvRows = () => { const o = []; const all = id => { if (!hit(id)) return; o.push(id); kids(id).forEach(all); }; roots.forEach(all); return o; };
+    function draw() {
+      const a = rows();
+      el.innerHTML = `<div class="tools no-print" style="margin-bottom:10px;justify-content:space-between"><div class="tools"><input type="search" placeholder="ค้นหางาน / ผู้รับผิดชอบ / สถานะ" value="${esc(q)}" aria-label="ค้นหางาน">
+        <button class="btn" type="button" data-x="open">ขยายทั้งหมด</button><button class="btn" type="button" data-x="close">ย่อทั้งหมด</button></div>
+        <div class="tools"><span class="note">${nf(csvRows().length)} งาน</span><button class="btn" type="button" data-x="csv">ส่งออก CSV</button></div></div>
+        <div class="tbl-wrap"><table style="min-width:1180px"><thead><tr><th scope="col">งาน (ตามลำดับชั้น ClickUp)</th><th scope="col">บทบาทในโครงการ</th><th scope="col">สถานะ</th><th scope="col">ผู้รับผิดชอบ</th><th scope="col">กำหนดส่ง</th><th scope="col">อัปเดตล่าสุด</th><th scope="col">ข้อสังเกต</th><th scope="col">ต้นทาง</th></tr></thead><tbody>
+        ${a.length ? a.map(id => { const t = T[id], k = kids(id), d = t.depth - spec.base;
+          return `<tr class="tree d${Math.min(d, 4)}"><td><span class="tree-in" style="padding-left:${d * 22}px">${k.length ? `<button type="button" class="tgl" data-t="${esc(id)}" aria-expanded="${!closed.has(id) || !!q}" aria-label="${closed.has(id) ? 'ขยาย' : 'ย่อ'} ${esc(t.name)}">${closed.has(id) && !q ? '▸' : '▾'}</button>` : '<span class="tgl-sp"></span>'}${d === 0 ? '<b>' + esc(t.name) + '</b>' : esc(t.name)}${k.length ? ` <span class="note">(${k.length})</span>` : ''}</span></td>
+            <td>${t.role_label ? esc(t.role_label) : d === 0 ? 'งานหลัก' : 'งานย่อย'}</td><td>${tag(t.status, STAT[t.status])}</td><td>${t.assignees.length ? esc(t.assignees.join(', ')) : NA('ไม่ระบุ')}</td>
+            <td>${t.due ? thD(t.due) + (t.overdue ? ' ' + tag('เลยกำหนด', 'wait') : '') + (t.role === 'decision' || t.role === 'milestone' ? ' <span class="note">(ประมาณการ)</span>' : '') : NA('ไม่มีกำหนด')}</td>
+            <td>${thD(t.updated)}</td><td>${t.flags.map(f => `<div class="flag">${esc(f)}</div>`).join('')}${t.desc ? `<details><summary>Note ใน ClickUp</summary><div class="note pre">${esc(t.desc)}</div></details>` : ''}</td><td>${cuLink(t.url, 'ClickUp')}</td></tr>`; }).join('') : `<tr><td colspan="8"><div class="empty">ไม่มีงานในมุมมองนี้</div></td></tr>`}</tbody></table></div>`;
+      const inp = $('input[type=search]', el);
+      inp.oninput = () => { q = inp.value.trim().toLowerCase(); const p = inp.selectionStart; draw(); const n = $('input[type=search]', el); n.focus(); n.setSelectionRange(p, p); };
+      el.querySelectorAll('.tgl').forEach(b => b.onclick = () => { const id = b.dataset.t; closed.has(id) ? closed.delete(id) : closed.add(id); draw(); });
+      el.querySelectorAll('button[data-x]').forEach(b => b.onclick = () => {
+        if (b.dataset.x === 'open') { closed.clear(); draw(); }
+        else if (b.dataset.x === 'close') { Object.keys(T).forEach(id => { if (kids(id).length) closed.add(id); }); draw(); }
+        else exportCsv({ file: 'PSG_clickup_hierarchy', cols: [{ k: 'level', label: 'ชั้น' }, { k: 'id', label: 'Task ID' }, { k: 'parent', label: 'Parent ID' }, { k: 'name', label: 'งาน' }, { k: 'item', label: 'Project ID' }, { k: 'role', label: 'บทบาท' }, { k: 'status', label: 'สถานะ' }, { k: 'assignees', label: 'ผู้รับผิดชอบ' }, { k: 'due', label: 'กำหนดส่ง' }, { k: 'overdue', label: 'เลยกำหนด' }, { k: 'updated', label: 'อัปเดตล่าสุด' }, { k: 'flags', label: 'ข้อสังเกต' }, { k: 'url', label: 'ClickUp' }] },
+          csvRows().map(id => { const t = T[id]; return { level: t.depth + 1, id: t.id, parent: t.parent || '', name: t.name, item: t.item, role: t.role_label || '', status: t.status, assignees: t.assignees.join(', '), due: t.due || '', overdue: t.overdue ? 'ใช่' : '', updated: (t.updated || '').slice(0, 10), flags: t.flags.join(' | '), url: t.url }; }));
+      });
+    }
+    draw();
+  }
+  function invCols() {
+    return [{ k: 'inv_id', label: 'รหัสรายการลงทุน' }, { k: 'po', label: 'PO', fmt: r => r.po ? esc(r.po) : NA('ไม่มี PO') },
+      { k: 'docs', label: 'เอกสาร AP/EXP', fmt: r => r.docs.length ? esc(r.docs.join(', ')) : NA('ยังไม่บันทึก'), csv: r => r.docs.join(' ') },
+      { k: 'vendors', label: 'ผู้ขาย', fmt: r => esc(r.vendors.join(', ')), csv: r => r.vendors.join(' / ') }, { k: 'desc', label: 'รายการ (บรรทัดแรก)', fmt: r => esc((r.desc || '').slice(0, 70)) },
+      { k: 'accs', label: 'บัญชี', fmt: r => esc(r.accs.join(', ')), csv: r => r.accs.join(' ') },
+      { k: 'budget', label: 'งบอนุมัติ', r: 1, fmt: () => NA('รอแหล่งข้อมูล'), csv: () => '' },
+      { k: 'po_amt', label: 'มูลค่า PO (ภาระผูกพัน)', r: 1, fmt: r => r.po_amt == null ? NA('ไม่อยู่ในรายงาน PO') : B(r.po_amt) + (r.po_status.length ? `<br><span class="note">${esc(r.po_status.join('/'))}</span>` : ''), csv: r => r.po_amt == null ? '' : r.po_amt / 100 },
+      { k: 'received', label: 'รับสินค้า/บริการ', r: 1, fmt: () => NA('รอแหล่งข้อมูล'), csv: () => '' },
+      { k: 'booked_amt', label: 'บันทึกบัญชีสินทรัพย์ (ก่อน VAT)', r: 1, fmt: r => r.booked_amt == null ? NA('ยังไม่บันทึก') : B(r.booked_amt), csv: r => r.booked_amt == null ? '' : r.booked_amt / 100 },
+      { k: 'paid', label: 'จ่ายจริง', r: 1, fmt: () => NA('รอแหล่งข้อมูล'), csv: () => '' },
+      { k: 'map', label: 'สถานะ mapping', fmt: r => tag(MAPL[r.map][0], MAPL[r.map][1]), csv: r => MAPL[r.map][0] },
+      { k: 'projects', label: 'โครงการ', fmt: r => r.projects.length ? esc(r.projects.join(', ')) : NA('–'), csv: r => r.projects.join(' ') }];
+  }
+  const invTot = a => ({ po_amt: M.sum(a, x => x.po_amt || 0), booked_amt: M.sum(a, x => x.booked_amt || 0) });
+  function openInv(title, rows) { openTable({ title, sub: 'มูลค่า PO และยอดบันทึกบัญชีเป็นคนละฐาน — แสดงแยก ไม่บวกรวมกัน', cols: invCols(), rows, sort: 'inv_id', dir: 1, file: 'PSG_investments', minw: 1500, total: invTot }); }
+  function boiPanel(P, T, it) {
+    const root = T[it.roots[0]]; if (!root) return '';
+    const step = t => { const isDec = t.role === 'decision', isSub = t.role === 'submission', isMs = t.role === 'milestone';
+      const act = isDec ? NA('ไม่ใช่กิจกรรมของบริษัท') : tag(t.kind === 'done' ? 'ทำขั้นตอนเสร็จ' : t.kind === 'closed' ? 'ยกเลิก' : t.status, t.kind === 'done' ? 'fact' : STAT[t.status]);
+      const out = t.outcome_kind === 'returned' ? tag('ถูกตีกลับ (ตาม Note)', 'wait') : isDec ? tag(t.open ? 'รอผลพิจารณา' : 'ClickUp ปิดงานแล้ว — ต้องมีเอกสารผล', 'wait') : isSub ? (t.kind === 'done' ? tag('ยังไม่มีหลักฐานผลพิจารณา', 'none') : NA('–')) : isMs ? NA('ยังไม่ถึงขั้นนี้') : NA('–');
+      return `<tr><td style="padding-left:${(t.depth - root.depth - 1) * 18 + 6}px">${esc(t.name)}</td><td>${esc(t.role_label || '')}</td><td>${act}</td><td>${out}</td><td>${t.due ? thD(t.due) + (isDec || isMs ? ' <span class="note">(ประมาณการ)</span>' : '') : NA('ไม่มีกำหนด')}</td><td>${cuLink(t.url, 'ClickUp')}</td></tr>`; };
+    const dfs = (id, o) => { T[id].children.forEach(c => { o.push(T[c]); dfs(c, o); }); return o; };
+    return `<section class="card accent"><div class="head"><div><h2>${esc(it.name)} — ขั้นตอนและผลพิจารณา</h2><p class="sub">แยก "กิจกรรมเสร็จ" ออกจาก "ผลพิจารณาสำเร็จ" · งานที่ชื่อมีคำว่า "อนุมัติ" ไม่ใช่หลักฐานการอนุมัติ · ไม่คำนวณสิทธิประโยชน์ภาษี/รายได้จาก BOI</p></div>${tag(CONF[it.status][0], CONF[it.status][1])}</div>
+      <div class="mini" style="margin-bottom:12px"><div class="row"><span>วันคาดว่าจะได้รับบัตร <b>(ประมาณการ)</b> — ${esc(it.expected_date_note || 'ตามกำหนดส่งงานหลักใน ClickUp')}</span><b>${it.due ? thD(it.due) : 'N/A'}</b></div>
+      <div class="row"><span>งานถัดไปตามข้อมูล ClickUp</span><b>${it.next ? esc(it.next.name) + (it.next.due ? ' · ' + thD(it.next.due) : '') : '–'}</b></div></div>
+      <div class="tbl-wrap"><table style="min-width:900px"><thead><tr><th>ขั้นตอน</th><th>บทบาท</th><th>กิจกรรม (สถานะ ClickUp)</th><th>ผลพิจารณา</th><th>กำหนด</th><th>ต้นทาง</th></tr></thead><tbody>${dfs(root.id, []).map(step).join('')}</tbody></table></div></section>`;
+  }
   function pProj() {
+    const P = S.projects;
     const cip = S.cip, po17 = S.po.filter(p => p.acc.startsWith('1701'));
-    return `<div class="grid g3">
+    const fin = `<section class="card"><div class="head"><div><h2>2 · เงินลงทุนและภาระจัดซื้อจาก TRCLOUD</h2><p class="sub">ฐานบัญชี — แยกจากสถานะงาน ClickUp · ข้อมูล TRCLOUD ณ ${thD(S.meta.asof)} · การอัปเดตโครงการใน ClickUp ไม่ได้ทำให้ตัวเลขบัญชีเป็นปัจจุบันขึ้น</p></div><span class="chip">TRCLOUD ณ ${thD(S.meta.asof)}</span></div>
+      <div class="grid g3">
       ${kpi({ label: 'บันทึกเข้าสินทรัพย์ระหว่างก่อสร้าง/ปรับปรุง', val: MBv(M.sum(cip, a => a.amt))[0], unit: MBv(M.sum(cip, a => a.amt))[1], sub: `AP/EXP ${cip.length} บรรทัด บัญชี 1701xxx (ก่อน VAT) · ไม่เข้า P&L` })}
-      ${kpi({ label: 'PO ที่ลงบัญชีสินทรัพย์', val: nf(new Set(po17.map(p => p.doc)).size), unit: 'ใบ', sub: `มูลค่า ${MB(M.sum(po17, p => p.amt))} · เป็นภาระผูกพัน ไม่ใช่ค่าใช้จ่าย` })}
-      ${kpi({ label: 'Resource Utilization', val: null, na: 'ไม่แสดง', sub: 'ไม่มีชั่วโมงทำงานจริงในระบบ' })}
-    </div>
-    <section class="card"><div class="head"><div><h2>งานติดตั้ง/ปรับปรุง (Overhaul, Installation, Improvement)</h2><p class="sub">จาก AP/EXP ที่ลงบัญชี 1701xxx · ยังไม่มีงบประมาณ แผน หรือ % ความคืบหน้า → ไม่แสดงสถานะล่าช้า</p></div></div>
-      ${slot({ cols: [{ k: 'date', label: 'วันที่', fmt: r => thD(r.date) }, { k: 'doc', label: 'เอกสาร' }, { k: 'src', label: 'ที่มา' }, { k: 'vendor', label: 'ผู้ขาย' }, { k: 'acc', label: 'บัญชี' }, { k: 'name', label: 'รายการ' }, { k: 'po', label: 'PO' }, { k: 'amt', label: 'ก่อน VAT', r: 1, money: 1 }], rows: cip, sort: 'date', dir: -1, file: 'PSG_cip', total: a => ({ amt: M.sum(a, x => x.amt) }) })}</section>`;
+      ${kpi({ label: 'PO ที่ลงบัญชีสินทรัพย์', val: nf(new Set(po17.map(p => p.doc)).size), unit: 'ใบ', sub: `มูลค่า ${MB(M.sum(po17, p => p.amt))} · เป็นภาระผูกพัน ไม่ใช่ค่าใช้จ่าย · ไม่บวกกับยอดบันทึกบัญชี` })}
+      ${P ? kpi({ label: 'รายการลงทุนที่ยังไม่ระบุโครงการ', val: nf(P.investments.filter(i => i.map === 'unlinked').length), unit: `จาก ${nf(P.investments.length)} รายการ`, sub: 'รายการลงทุน = 1 PO หรือ 1 เอกสาร AP/EXP ที่ไม่มี PO · ไม่ใช่จำนวนโครงการ', c: 'warn', fn: () => openInv('รายการลงทุนที่ยังไม่ระบุโครงการ', P.investments.filter(i => i.map === 'unlinked')) }) : ''}
+      </div></section>
+      ${P ? `<section class="card"><div class="head"><div><h2>รายการลงทุน (ระดับ PO / เอกสาร)</h2><p class="sub">งบอนุมัติ · มูลค่า PO · รับสินค้า/บริการ · ยอดบันทึกบัญชี · เงินจ่ายจริง แยกคอลัมน์ ไม่บวกข้ามคอลัมน์ · ยอดรวมท้ายตารางรวมเฉพาะในคอลัมน์เดียวกัน · ไม่อนุมานความคืบหน้าทางกายภาพจากสัดส่วนการจ่ายเงิน</p></div></div>
+        ${slot({ cols: invCols(), rows: P.investments, sort: 'inv_id', dir: 1, file: 'PSG_investments', minw: 1500, total: invTot, filters: [{ k: 'map', label: 'สถานะ mapping', get: r => MAPL[r.map][0] }, { k: 'projects', label: 'โครงการ', get: r => r.projects.join(', ') || '(ยังไม่ระบุ)' }] })}</section>` : ''}
+      <section class="card"><div class="head"><div><h2>งานติดตั้ง/ปรับปรุง (Overhaul, Installation, Improvement)</h2><p class="sub">จาก AP/EXP ที่ลงบัญชี 1701xxx · ยังไม่มีงบประมาณ แผน หรือ % ความคืบหน้า → ไม่แสดงสถานะล่าช้า · จำนวนบรรทัดไม่ใช่จำนวนโครงการ</p></div></div>
+      ${slot({ cols: [{ k: 'date', label: 'วันที่', fmt: r => thD(r.date) }, { k: 'doc', label: 'เอกสาร' }, { k: 'src', label: 'ที่มา' }, { k: 'vendor', label: 'ผู้ขาย' }, { k: 'acc', label: 'บัญชี' }, { k: 'name', label: 'รายการ' }, { k: 'po', label: 'PO' },
+        { k: 'map', label: 'สถานะ mapping', fmt: r => r.map ? tag(MAPL[r.map][0], MAPL[r.map][1]) : NA(), csv: r => r.map ? MAPL[r.map][0] : '' }, { k: 'projects', label: 'โครงการ' }, { k: 'amt', label: 'ก่อน VAT', r: 1, money: 1 }],
+        rows: cip, sort: 'date', dir: -1, file: 'PSG_cip', minw: 1250, total: a => ({ amt: M.sum(a, x => x.amt) }), filters: P ? [{ k: 'map', label: 'สถานะ mapping', get: r => r.map ? MAPL[r.map][0] : '–' }, { k: 'projects', label: 'โครงการ', get: r => r.projects || '–' }] : [] })}</section>`;
+    if (!P) return `<section class="card accent warn"><h2>1 · โครงการและงานสำคัญจาก ClickUp</h2><p class="sub" style="margin-top:6px">${NA('รอแหล่งข้อมูล')} — snapshot นี้ยังไม่มีข้อมูล ClickUp (รัน scripts/build_projects.py หลังดึงข้อมูล)</p>
+      <div class="grid g3" style="margin-top:12px">${kpi({ label: 'Resource Utilization', val: null, na: 'ไม่แสดง', sub: 'ไม่มีชั่วโมงทำงานจริงในระบบ' })}</div></section>` + fin;
+    const T = {}; P.tasks.forEach(t => { T[t.id] = t; });
+    const items = pvItems(P), ids = new Set(items.map(i => i.project_id));
+    const vt = P.tasks.filter(t => ids.has(t.item)), roots = items.reduce((a, i) => a.concat(i.roots), []);
+    const conf = items.filter(i => i.is_project && i.status === 'confirmed'), propProj = items.filter(i => i.is_project && i.status !== 'confirmed');
+    const sc = {}; roots.forEach(r => { sc[T[r].status] = (sc[T[r].status] || 0) + 1; });
+    const od = vt.filter(t => t.overdue), nd = vt.filter(t => !t.due);
+    const tcols = [{ k: 'name', label: 'งาน', fmt: r => esc(r.name) }, { k: 'item', label: 'Project ID' }, { k: 'status', label: 'สถานะ', fmt: r => tag(r.status, STAT[r.status]) }, { k: 'assignees', label: 'ผู้รับผิดชอบ', fmt: r => esc(r.assignees.join(', ')) || NA('ไม่ระบุ'), csv: r => r.assignees.join(', ') },
+      { k: 'due', label: 'กำหนดส่ง', fmt: r => thD(r.due) }, { k: 'updated', label: 'อัปเดตล่าสุด', fmt: r => thD(r.updated) }, { k: 'url', label: 'ClickUp', fmt: r => cuLink(r.url, 'ClickUp'), csv: r => r.url }];
+    const tabs = `<div class="seg2" role="tablist" aria-label="มุมมองโครงการ">${PVIEW.map(([k, l, ty]) => { const n = P.items.filter(i => !ty || ty.indexOf(i.type) >= 0).length; return `<button type="button" role="tab" aria-selected="${pv()[0] === k}" ${drill(() => { st.pv = k; render(false); })}>${l} <span class="note">${n}</span></button>`; }).join('')}</div>`;
+    const reg = slot({ cols: [
+      { k: 'name', label: 'รายการ', fmt: r => `<b>${esc(r.name)}</b>${r.parent_project ? `<br><span class="note">ภายใต้ ${esc(r.parent_project)}</span>` : ''}`, csv: r => r.name },
+      { k: 'project_id', label: 'Project ID' }, { k: 'type', label: 'ประเภท', fmt: r => esc(PTYPE[r.type] || r.type) + (r.is_project ? '' : '<br><span class="note">ไม่นับเป็นโครงการ</span>'), csv: r => PTYPE[r.type] || r.type },
+      { k: 'stage', label: 'ขั้นดำเนินงาน' }, { k: 'owner', label: 'ผู้รับผิดชอบ (ClickUp)', fmt: r => r.owner ? esc(r.owner) : NA('ไม่ระบุ') },
+      { k: 'main_status', label: 'สถานะงานหลัก', fmt: r => r.main_status ? tag(r.main_status, STAT[r.main_status]) : NA('ไม่มีงานใน ClickUp') },
+      { k: 'due', label: 'กำหนดส่ง', fmt: r => r.due ? thD(r.due) + (r.type === 'regulatory_approval' ? ' <span class="note">(ประมาณการ)</span>' : '') : NA('ไม่มีกำหนด'), sortv: r => r.due || '9' },
+      { k: 'updated', label: 'อัปเดตล่าสุด', fmt: r => thD(r.updated), sortv: r => r.updated || '' },
+      { k: 'sub', label: 'งานย่อยเสร็จ', r: 1, fmt: r => r.sub.pct === null ? NA('N/A — ไม่มีงานย่อย') : `${r.sub.done}/${r.sub.leaves - r.sub.cancelled} <span class="note">(${nf(r.sub.pct, 0)}%)</span>`, csv: r => r.sub.pct === null ? 'N/A' : r.sub.done + '/' + (r.sub.leaves - r.sub.cancelled), sortv: r => r.sub.pct === null ? -1 : r.sub.pct },
+      { k: 'physical', label: 'Physical Progress', r: 1, fmt: r => r.physical ? nf(r.physical.pct, 0) + '% <span class="note">' + esc(r.physical.confirmed_by) + '</span>' : NA('ยังไม่มีผู้ยืนยัน'), csv: r => r.physical ? r.physical.pct : 'N/A' },
+      { k: 'next', label: 'งานถัดไป', fmt: r => r.next ? esc(r.next.name) + (r.next.due ? `<br><span class="note">${thD(r.next.due)}</span>` : '') : NA('–'), csv: r => r.next ? r.next.name : '' },
+      { k: 'fin', label: 'TRCLOUD ที่เชื่อม', fmt: r => r.fin.confirmed_n ? `${r.fin.confirmed_n} รายการ · ${MB(r.fin.confirmed_booked)}` : r.fin.proposed_n ? tag(r.fin.proposed_n + ' คู่รอตรวจ', 'wait') : NA('ยังไม่มี'), csv: r => r.fin.confirmed_n },
+      { k: 'status', label: 'การยืนยัน', fmt: r => tag(CONF[r.status][0], CONF[r.status][1]) + (r.confirmed_by ? `<br><span class="note">${esc(r.confirmed_by)} ${esc(r.confirmed_at)}</span>` : ''), csv: r => CONF[r.status][0] },
+      { k: 'reason', label: 'เหตุผลการจัดประเภท', fmt: r => `<details><summary>ดู</summary><div class="note">${esc(r.reason || '')}${(r.evidence || []).map(e => '<br>• ' + esc(e)).join('')}</div></details>`, csv: r => r.reason + ' | ' + (r.evidence || []).join(' | ') },
+      { k: 'url', label: 'ต้นทาง', fmt: r => r.url ? cuLink(r.url, 'ClickUp') : r.roots.length ? r.roots.map(x => cuLink(T[x].url, T[x].name.slice(0, 18))).join('<br>') : NA('–'), csv: r => r.roots.map(x => T[x].url).join(' ') }],
+      rows: items, sort: 'type', dir: 1, size: 15, file: 'PSG_project_register', minw: 1900, empty: 'ไม่มีรายการในมุมมองนี้' });
+    const insHtml = P.insights.filter(i => !i.tasks.length || i.tasks.some(t => !T[t.id] || ids.has(T[t.id].item)) || st.pv === 'all').map(i => {
+      const tl = i.tasks.filter(t => st.pv === 'all' || ids.has(T[t.id].item));
+      const extra = i.kind === 'inv_unlinked' ? `<button class="link" type="button" ${drill(() => openInv('รายการลงทุนที่ยังไม่ระบุโครงการ', P.investments.filter(x => x.map === 'unlinked')))}>ดูรายการ →</button>`
+        : i.kind === 'project_no_fin' ? `<div class="note">${i.items.map(x => esc((P.items.find(y => y.project_id === x) || {}).name || x)).join(' · ')}</div>` : '';
+      return `<div class="insight ${/overdue|stale|unlinked|mismatch|done_child|parent_open/.test(i.kind) ? 'warn' : ''}"><h3>${esc(i.text)}</h3>${tl.length ? `<div class="note">${tl.map(t => cuLink(t.url, t.name)).join(' · ')}</div>` : ''}${extra}</div>`; }).join('');
+    const boi = items.filter(i => i.type === 'regulatory_approval' && i.roots.length).map(i => boiPanel(P, T, i)).join('');
+    const maps = ['confirmed', 'proposed', 'unlinked', 'not_project'].map(k => [k, P.investments.filter(i => i.map === k)]);
+    return `<div class="note-bar cols"><span><b>ClickUp</b> (แผนงาน/สถานะ) ดึงเมื่อ ${thDT(P.meta.fetched_at)} · ${esc(P.meta.tz || '')}</span><span><b>TRCLOUD</b> (บัญชี/จัดซื้อ) ข้อมูล ณ ${thD(S.meta.asof)}</span><span>ทะเบียนโครงการ ${esc(P.meta.registry_version || '–')}</span></div>
+    <section class="card"><div class="head"><div><h2>1 · โครงการและงานสำคัญจาก ClickUp</h2><p class="sub">Task / List ใน ClickUp ไม่ใช่โครงการโดยอัตโนมัติ — จัดประเภทผ่านทะเบียนโครงการ · การจัดประเภทที่ยังไม่มีผู้ยืนยันแสดงเป็น "ข้อเสนอ" · เกินกำหนดคำนวณ ณ ${thD(P.meta.today)} ตามเวลาผู้ใช้ ClickUp</p></div><span class="chip">ClickUp ณ ${thDT(P.meta.fetched_at)}</span></div>
+      ${tabs}
+      <div class="grid g4" style="margin-top:14px">
+      ${kpi({ label: 'โครงการที่ยืนยันแล้ว', val: nf(conf.length), unit: 'โครงการ', sub: `ข้อเสนอประเภทโครงการ ${propProj.length} รายการ รอผู้รับผิดชอบยืนยัน · ไม่นับงานประจำ/ประชุม/ปันผล` })}
+      ${kpi({ label: 'รายการ proposed / รอจำแนก', val: nf(items.filter(i => i.status !== 'confirmed').length), unit: 'รายการ', sub: `รอจำแนก ${items.filter(i => i.type === 'needs_review').length} · ทะเบียนทั้งหมดในมุมมองนี้ ${items.length}`, c: 'warn' })}
+      ${kpi({ label: 'สถานะงานหลัก', val: nf(roots.length), unit: 'งานหลัก', sub: Object.entries(sc).map(([k, v]) => `${k} ${v}`).join(' · ') || '–' })}
+      ${kpi({ label: 'งานเกินกำหนดตามข้อมูล', val: nf(od.length), unit: 'งาน', sub: `ยังไม่ complete/cancelled และกำหนดส่งก่อน ${thD(P.meta.today)}`, c: od.length ? 'warn' : '', fn: od.length ? () => openTable({ title: 'งานที่เลยกำหนดส่งตามข้อมูล ClickUp', sub: 'ไม่ใช่การประเมินผู้รับผิดชอบ — อาจเป็นกำหนดที่ไม่ได้อัปเดต', cols: tcols, rows: od, sort: 'due', dir: 1, file: 'PSG_clickup_overdue' }) : null })}
+      ${kpi({ label: 'งานไม่มีกำหนดส่ง', val: nf(nd.length), unit: 'งาน', sub: `ยังเปิดอยู่ ${nd.filter(t => t.open).length} · รวมงานหลักและงานย่อย`, fn: nd.length ? () => openTable({ title: 'งานที่ไม่มีกำหนดส่ง', cols: tcols, rows: nd, sort: 'item', dir: 1, file: 'PSG_clickup_nodue' }) : null })}
+      ${kpi({ label: 'Resource Utilization', val: null, na: 'ไม่แสดง', sub: `ClickUp ไม่มี Time Estimate/Time Spent (${P.tasks.filter(t => t.time_est || t.time_spent).length}/${P.tasks.length} งาน) และไม่มีชั่วโมงจริง — ไม่คำนวณจากจำนวนคนหรือจำนวนงาน` })}
+      ${kpi({ label: 'Physical Progress', val: null, na: 'ยังไม่มีผู้ยืนยัน', sub: 'ต้องมาจากผู้ควบคุมงาน · ไม่ใช้สัดส่วนงานย่อยหรือการจ่ายเงินแทน' })}
+      ${kpi({ label: 'ดึงข้อมูล ClickUp', val: thD(P.meta.fetched_at), sub: `${P.meta.pages} หน้า · ${P.meta.rows_raw} แถว → ${P.tasks.length} งาน (ตัดซ้ำ ${P.meta.dup}) · PSG Space เท่านั้น` })}
+      </div></section>
+    ${boi}
+    <section class="card"><div class="head"><div><h2>ทะเบียนโครงการและงานสำคัญ — ${esc(pv()[1])}</h2><p class="sub">"งานย่อยเสร็จ" นับเฉพาะงานย่อยระดับล่างสุด (ไม่บวกงานแม่+งานลูกซ้ำ) · cancelled ไม่นับเป็นเสร็จ · ไม่มีงานย่อย = N/A · ไม่ใช่ Physical Progress</p></div></div>${reg}</section>
+    <section class="card"><div class="head"><div><h2>ลำดับชั้นงานจาก ClickUp</h2><p class="sub">รักษา parent–child ทุกระดับตามต้นทาง · วันที่เป็นวันตามเขตเวลา ${esc(P.meta.tz || '')} · งาน "อนุมัติ"/"ผลพิจารณา" แสดงกำหนดเป็นประมาณการ</p></div></div>
+      ${treeSlot({ T, roots, base: 0 })}${P.meta.empty_lists.length ? `<p class="note" style="margin-top:8px">List ที่ยังไม่มีงาน: ${P.meta.empty_lists.map(l => esc(l.name)).join(', ')}</p>` : ''}</section>
+    <section class="card"><div class="head"><div><h2>ข้อสังเกตจากข้อมูล</h2><p class="sub">ทุกข้อมีลิงก์ต้นทาง · ไม่สร้างคะแนนความเสี่ยง · วันที่อัปเดตไม่ใช่ตัวชี้วัดผลงานของผู้รับผิดชอบ</p></div></div><div class="grid g2">${insHtml || '<div class="empty">ไม่มีข้อสังเกต</div>'}</div></section>
+    ${fin}
+    <section class="card"><div class="head"><div><h2>3 · รายการที่เชื่อมกันแล้วและยังไม่ยืนยัน</h2><p class="sub">ClickUp กับ TRCLOUD มี grain ต่างกัน (หลายต่อหลาย) · ไม่จับคู่จากชื่อ ผู้ขาย หรือยอดใกล้กันอย่างเดียว · คู่ที่ยืนยันต้องมีเหตุผล ผู้ยืนยัน และวันที่ (intake/project_links.json)</p></div></div>
+      <div class="grid g4">${maps.map(([k, a]) => `<button type="button" class="card kpi ${k === 'unlinked' ? 'accent warn' : 'accent'}" ${drill(() => openInv(MAPL[k][0], a))}><span class="lab">${esc(MAPL[k][0])}</span><span class="val">${nf(a.length)} <small>รายการ</small></span><span class="full">PO ${MB(M.sum(a, x => x.po_amt || 0))} · บันทึกบัญชี ${MB(M.sum(a, x => x.booked_amt || 0))} (แสดงแยก)</span><span class="more">ดูรายการ →</span></button>`).join('')}</div>
+      <p class="note" style="margin-top:10px">${maps[0][1].length + maps[1][1].length ? '' : 'ยังไม่มีคู่ที่ยืนยันหรือเสนอ — ข้อมูล ClickUp ปัจจุบันไม่มีงานที่ระบุ PO/เอกสาร/เครื่องจักรที่ตรงกับรายการลงทุน 1701xxx จึงยังไม่เสนอคู่ใด ๆ · '}รายการที่ยังไม่เชื่อมยังแสดงครบในตารางรายการลงทุนด้านบน ไม่ถูกซ่อน</p></section>`;
   }
   function pStrat() {
     const ea = M.estAccuracy(S), ms = months(), L = S.pnl.lines, rev = M.sum(ms, m => L.rev_sales[m]);
@@ -337,7 +470,7 @@
       ['การรับชำระ (วันเงินเข้า)', 'ต้องยืนยัน', 'ใช้วันที่ IV สถานะ Cash แทนวันเงินเข้า'], ['เงินสด / Cash Flow', 'รอแหล่งข้อมูล', 'ต้องมี bank statement หรือแพ็กเกจ Data Warehouse'], ['kWh ผลิต / ชั่วโมงเดิน / Availability', 'รอแหล่งข้อมูล', 'ต้องมีข้อมูลมิเตอร์และบันทึกเดินเครื่อง'],
       ['ต้นทุนวัตถุดิบต่อหน่วย / ต่อ kWh', 'รอแหล่งข้อมูล', 'ต้องมี Material Master และปริมาณรับ/ใช้'], ['หมวดต้นทุน 5101000', 'ต้องยืนยัน', 'จัดหมวดจากข้อความ'], ['ใบงานค้าง/อายุงาน/ใบงานตามเครื่อง', 'ใช้ได้แล้ว', 'snapshot จากระบบแจ้งซ่อม'],
       ['MTBF / MTTR / PM Compliance', 'รอแหล่งข้อมูล', 'ต้องมีชั่วโมงเดิน เหตุเสียยืนยัน แผน PM'], ['SLA ซ่อม', 'ต้องยืนยัน', 'ต้องยืนยันกฎเวลาและจุดวัด'], ['ค่าซ่อมต่อใบงาน/เครื่องจักร', 'รอแหล่งข้อมูล', 'ต้องมีตารางเชื่อมใบงาน–PO ที่ยืนยัน'],
-      ['โครงการ: งบ/ความคืบหน้า', 'รอแหล่งข้อมูล', 'มีเฉพาะยอดบันทึกสินทรัพย์ 1701xxx'], ['Resource Utilization', 'ไม่เหมาะกับ PSG', 'ไม่มีชั่วโมงทำงานจริง'], ['CRM (Lead/Pipeline/Win Rate)', 'ไม่เหมาะกับ PSG', 'ลูกค้ารายเดียวตามสัญญา VSPP'], ['CLV', 'ไม่เหมาะกับ PSG', 'ไม่มีนิยามที่ใช้ได้'], ['เทียบปีก่อน (YoY)', 'รอแหล่งข้อมูล', 'Ledger เริ่มปี 2569']];
+      ['โครงการ: สถานะ/กำหนดส่ง/งานย่อยเสร็จ (ClickUp)', 'ต้องยืนยัน', 'ดึงจาก ClickUp แล้ว · การจัดประเภทโครงการยังเป็นข้อเสนอ รอผู้รับผิดชอบยืนยัน'], ['โครงการ: งบอนุมัติ', 'รอแหล่งข้อมูล', 'ยังไม่มีเอกสารงบลงทุนที่อนุมัติ'], ['โครงการ: ต้นทุนที่เชื่อมโครงการ', 'ต้องยืนยัน', 'มียอดบันทึกสินทรัพย์ 1701xxx แต่ยังไม่มีคู่ mapping ที่ยืนยัน'], ['โครงการ: Physical Progress', 'รอแหล่งข้อมูล', 'ต้องมาจากผู้ควบคุมงาน ไม่ใช้สัดส่วนงานย่อยแทน'], ['Resource Utilization', 'ไม่เหมาะกับ PSG', 'ไม่มีชั่วโมงทำงานจริง และ ClickUp ไม่มี Time Estimate/Time Spent'], ['CRM (Lead/Pipeline/Win Rate)', 'ไม่เหมาะกับ PSG', 'ลูกค้ารายเดียวตามสัญญา VSPP'], ['CLV', 'ไม่เหมาะกับ PSG', 'ไม่มีนิยามที่ใช้ได้'], ['เทียบปีก่อน (YoY)', 'รอแหล่งข้อมูล', 'Ledger เริ่มปี 2569']];
     const cls = s => ({ 'ใช้ได้แล้ว': 'fact', 'ต้องยืนยัน': 'wait', 'รอแหล่งข้อมูล': 'none', 'ไม่เหมาะกับ PSG': 'none' }[s]);
     return `<div class="grid g4">
       ${kpi({ label: 'ชุดข้อมูลที่ดึงสำเร็จ', val: nf(ok), unit: `/ ${ds.length}`, sub: 'TRCloud MCP ของ PSG แบบอ่านอย่างเดียว' })}
@@ -345,7 +478,7 @@
       ${kpi({ label: 'ข้อมูล ณ วันที่', val: thD(S.meta.asof), sub: `สร้าง snapshot ${esc(S.meta.built.slice(0, 16).replace('T', ' '))} น.` })}
       ${kpi({ label: 'Mapping version', val: S.meta.mapping_version, sub: 'config/mapping.json' })}
     </div>
-    <section class="card"><h2>ผลตรวจความถูกต้อง</h2><div class="mini" style="margin-top:8px">${S.checks.map(c => `<div class="row"><span>${esc(c.msg)}</span><b>${c.level === 'pass' ? tag('ผ่าน', 'fact') : c.level === 'warn' ? tag('ข้อจำกัด', 'wait') : tag('ไม่ผ่าน', 'bad')}</b></div>`).join('')}</div></section>
+    <section class="card"><h2>ผลตรวจความถูกต้อง</h2><div class="mini" style="margin-top:8px">${S.checks.concat(S.projects ? S.projects.checks.map(c => ({ level: c.level, msg: 'ClickUp/โครงการ: ' + c.msg })) : []).map(c => `<div class="row"><span>${esc(c.msg)}</span><b>${c.level === 'pass' ? tag('ผ่าน', 'fact') : c.level === 'warn' ? tag('ข้อจำกัด', 'wait') : tag('ไม่ผ่าน', 'bad')}</b></div>`).join('')}</div></section>
     <section class="card"><h2>ความพร้อมของ KPI</h2>${slot({ cols: [{ k: 0, label: 'KPI' }, { k: 1, label: 'สถานะ', fmt: r => tag(r[1], cls(r[1])) }, { k: 2, label: 'หมายเหตุ' }], rows: R, size: 25, file: 'PSG_kpi_readiness', filters: [{ k: 1, label: 'สถานะ' }] })}</section>
     <section class="card"><h2>ชุดข้อมูลต้นทาง</h2>${slot({ cols: [{ k: 'tool', label: 'เครื่องมือ' }, { k: 'params', label: 'พารามิเตอร์', fmt: r => esc(JSON.stringify(r.params)), csv: r => JSON.stringify(r.params) }, { k: 'rows', label: 'แถว', r: 1 }, { k: 'http', label: 'ผล' }, { k: 'fetched_at', label: 'ดึงเมื่อ' }], rows: ds, sort: 'tool', dir: 1, file: 'PSG_datasets' })}</section>`;
   }
@@ -360,12 +493,13 @@
       <span class="hint">ทุกเดือนเป็นผลเบื้องต้นจาก Ledger — ยังไม่มีข้อมูลยืนยันการปิดบัญชี · KPI กราฟ และตารางใช้ช่วงเดียวกัน</span>`;
   }
   function render(anim) {
-    DR = []; TB = []; GEN++;
+    DR = []; TB = []; TR = []; GEN++;
     const title = PAGES.find(p => p[0] === st.page)[1];
     $('#tabs').innerHTML = PAGES.map(([k, l]) => `<a href="#/${k}" ${k === st.page ? 'aria-current="page"' : ''}>${l}</a>`).join('');
     $('#ptitle').textContent = st.page === 'exec' ? 'PSG Executive Dashboard' : title;
     $('#psub').textContent = 'ภาพรวมธุรกิจ การเงิน การผลิต และซ่อมบำรุง · ' + S.meta.company;
-    $('#status').innerHTML = `<span class="chip"><span class="dot"></span>ข้อมูล ณ ${thD(S.meta.asof)}</span><span class="chip warn">ผลเบื้องต้น/ยังไม่ปิดบัญชี</span>`;
+    $('#status').innerHTML = st.page === 'proj' && S.projects ? `<span class="chip"><span class="dot"></span>ClickUp ณ ${thD(S.projects.meta.fetched_at)}</span><span class="chip"><span class="dot"></span>TRCLOUD ณ ${thD(S.meta.asof)}</span><span class="chip warn">การจัดประเภทโครงการยังเป็นข้อเสนอ</span>`
+      : `<span class="chip"><span class="dot"></span>ข้อมูล ณ ${thD(S.meta.asof)}</span><span class="chip warn">ผลเบื้องต้น/ยังไม่ปิดบัญชี</span>`;
     const per = usesPeriod();
     $('#filters').innerHTML = per ? filters() : '';
     document.querySelector('.filterbar').hidden = !per;
@@ -374,9 +508,10 @@
     const main = $('#main');
     try { main.innerHTML = fn() + (per ? '' : `<div class="note-bar">${periodNote()}</div>`); } catch (e) { main.innerHTML = `<div class="state err">แสดงผลไม่สำเร็จ: ${esc(e.message)}</div>`; console.error(e); return; }
     main.querySelectorAll('[data-table]').forEach(el => mountTable(el, TB[+el.dataset.table]));
+    main.querySelectorAll('[data-tree]').forEach(el => mountTree(el, TR[+el.dataset.tree]));
     document.documentElement.classList.toggle('no-anim', anim === false);
     if (anim !== false) countUp(main, GEN);
-    $('#foot').innerHTML = `PSG Executive Dashboard · ข้อมูลจาก TRCloud (อ่านอย่างเดียว) และไฟล์ใบงานซ่อม · ข้อมูลภายในสำหรับผู้บริหาร ห้ามเผยแพร่ · สร้าง ${esc(S.meta.built.slice(0, 16).replace('T', ' '))} น.`;
+    $('#foot').innerHTML = `PSG Executive Dashboard · ข้อมูลจาก TRCloud (อ่านอย่างเดียว)${S.projects ? ', ClickUp (อ่านอย่างเดียว)' : ''} และไฟล์ใบงานซ่อม · ข้อมูลภายในสำหรับผู้บริหาร ห้ามเผยแพร่ · สร้าง ${esc(S.meta.built.slice(0, 16).replace('T', ' '))} น.`;
     save();
   }
   function save() { try { sessionStorage.setItem('psg-st', JSON.stringify(st)); } catch (e) { /* ไม่บันทึก */ } }
