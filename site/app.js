@@ -492,7 +492,7 @@
   function render(anim) {
     DR = []; TB = []; TR = []; GEN++;
     const title = PAGES.find(p => p[0] === st.page)[1];
-    $('#tabs').innerHTML = PAGES.map(([k, l]) => `<a href="#/${k}" ${k === st.page ? 'aria-current="page"' : ''}>${l}</a>`).join('');
+    $('#tabs').innerHTML = `<span class="track">${PAGES.map(([k, l]) => `<a href="#/${k}" ${k === st.page ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</span>`;
     $('#ptitle').textContent = st.page === 'exec' ? 'PSG Executive Dashboard' : title;
     $('#psub').textContent = 'ภาพรวมธุรกิจ การเงิน การผลิต และซ่อมบำรุง · ' + S.meta.company;
     $('#status').innerHTML = st.page === 'proj' && S.projects ? `<span class="chip"><span class="dot"></span>ClickUp ณ ${thD(S.projects.meta.fetched_at)}</span><span class="chip"><span class="dot"></span>TRCLOUD ณ ${thD(S.meta.asof)}</span><span class="chip warn">การจัดประเภทโครงการยังเป็นข้อเสนอ</span>`
