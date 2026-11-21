@@ -21,7 +21,8 @@ const num = s => +String(s).replace(/[^\d.]/g, '');
   assert.ok((await kv('โครงการที่ยืนยันแล้ว')).includes(String(P.items.filter(i => i.is_project && i.status === 'confirmed').length)));
   assert.ok((await kv('งานเกินกำหนดตามข้อมูล')).includes(String(P.tasks.filter(t => t.overdue).length)));
   assert.ok((await kv('งานไม่มีกำหนดส่ง')).includes(String(P.tasks.filter(t => !t.due).length)));
-  assert.ok(/ไม่แสดง/.test(await kv('Resource Utilization')) && /ยังไม่มีผู้ยืนยัน/.test(await kv('Physical Progress')), 'ไม่แสดง Utilization/Physical ที่ข้อมูลไม่รองรับ'); ok++;
+  const sec1 = await p.$$eval('section.card', a => a.find(x => x.querySelector('h2') && x.querySelector('h2').textContent.startsWith('1 ·')).querySelectorAll('.kpi').length);
+  assert.strictEqual(sec1, 5, 'การ์ด KPI ส่วน ClickUp = 5 ใบ'); assert.strictEqual(await kv('Resource Utilization'), undefined, 'ไม่แสดงการ์ดที่ไม่มีข้อมูล'); ok++;
   // ห้ามเรียกจำนวนบรรทัด AP/EXP หรือ PO ว่าจำนวนโครงการ
   const labs = await p.$$eval('.kpi .lab', a => a.map(x => x.textContent)); assert.ok(!labs.some(l => /จำนวนโครงการ/.test(l))); ok++;
   // มุมมอง: KPI ตาราง และ CSV สอดคล้อง

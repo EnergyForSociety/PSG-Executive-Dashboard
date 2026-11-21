@@ -370,15 +370,12 @@
     return `<div class="note-bar cols"><span><b>ClickUp</b> (แผนงาน/สถานะ) ดึงเมื่อ ${thDT(P.meta.fetched_at)} · ${esc(P.meta.tz || '')}</span><span><b>TRCLOUD</b> (บัญชี/จัดซื้อ) ข้อมูล ณ ${thD(S.meta.asof)}</span><span>ทะเบียนโครงการ ${esc(P.meta.registry_version || '–')}</span></div>
     <section class="card"><div class="head"><div><h2>1 · โครงการและงานสำคัญจาก ClickUp</h2><p class="sub">Task / List ใน ClickUp ไม่ใช่โครงการโดยอัตโนมัติ — จัดประเภทผ่านทะเบียนโครงการ · การจัดประเภทที่ยังไม่มีผู้ยืนยันแสดงเป็น "ข้อเสนอ" · เกินกำหนดคำนวณ ณ ${thD(P.meta.today)} ตามเวลาผู้ใช้ ClickUp</p></div><span class="chip">ClickUp ณ ${thDT(P.meta.fetched_at)}</span></div>
       ${tabs}
-      <div class="grid g4" style="margin-top:14px">
+      <div class="grid g5" style="margin-top:14px">
       ${kpi({ label: 'โครงการที่ยืนยันแล้ว', val: nf(conf.length), unit: 'โครงการ', sub: `ข้อเสนอประเภทโครงการ ${propProj.length} รายการ รอผู้รับผิดชอบยืนยัน · ไม่นับงานประจำ/ประชุม/ปันผล` })}
       ${kpi({ label: 'รายการ proposed / รอจำแนก', val: nf(items.filter(i => i.status !== 'confirmed').length), unit: 'รายการ', sub: `รอจำแนก ${items.filter(i => i.type === 'needs_review').length} · ทะเบียนทั้งหมดในมุมมองนี้ ${items.length}`, c: 'warn' })}
       ${kpi({ label: 'สถานะงานหลัก', val: nf(roots.length), unit: 'งานหลัก', sub: Object.entries(sc).map(([k, v]) => `${k} ${v}`).join(' · ') || '–' })}
       ${kpi({ label: 'งานเกินกำหนดตามข้อมูล', val: nf(od.length), unit: 'งาน', sub: `ยังไม่ complete/cancelled และกำหนดส่งก่อน ${thD(P.meta.today)}`, c: od.length ? 'warn' : '', fn: od.length ? () => openTable({ title: 'งานที่เลยกำหนดส่งตามข้อมูล ClickUp', sub: 'ไม่ใช่การประเมินผู้รับผิดชอบ — อาจเป็นกำหนดที่ไม่ได้อัปเดต', cols: tcols, rows: od, sort: 'due', dir: 1, file: 'PSG_clickup_overdue' }) : null })}
       ${kpi({ label: 'งานไม่มีกำหนดส่ง', val: nf(nd.length), unit: 'งาน', sub: `ยังเปิดอยู่ ${nd.filter(t => t.open).length} · รวมงานหลักและงานย่อย`, fn: nd.length ? () => openTable({ title: 'งานที่ไม่มีกำหนดส่ง', cols: tcols, rows: nd, sort: 'item', dir: 1, file: 'PSG_clickup_nodue' }) : null })}
-      ${kpi({ label: 'Resource Utilization', val: null, na: 'ไม่แสดง', sub: `ClickUp ไม่มี Time Estimate/Time Spent (${P.tasks.filter(t => t.time_est || t.time_spent).length}/${P.tasks.length} งาน) และไม่มีชั่วโมงจริง — ไม่คำนวณจากจำนวนคนหรือจำนวนงาน` })}
-      ${kpi({ label: 'Physical Progress', val: null, na: 'ยังไม่มีผู้ยืนยัน', sub: 'ต้องมาจากผู้ควบคุมงาน · ไม่ใช้สัดส่วนงานย่อยหรือการจ่ายเงินแทน' })}
-      ${kpi({ label: 'ดึงข้อมูล ClickUp', val: thD(P.meta.fetched_at), sub: `${P.meta.pages} หน้า · ${P.meta.rows_raw} แถว → ${P.tasks.length} งาน (ตัดซ้ำ ${P.meta.dup}) · PSG Space เท่านั้น` })}
       </div></section>
     ${boi}
     <section class="card"><div class="head"><div><h2>ทะเบียนโครงการและงานสำคัญ — ${esc(pv()[1])}</h2><p class="sub">"งานย่อยเสร็จ" นับเฉพาะงานย่อยระดับล่างสุด (ไม่บวกงานแม่+งานลูกซ้ำ) · cancelled ไม่นับเป็นเสร็จ · ไม่มีงานย่อย = N/A · ไม่ใช่ Physical Progress</p></div></div>${reg}</section>
